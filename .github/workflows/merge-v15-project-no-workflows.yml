@@ -1,0 +1,57 @@
+name: Merge CrossPlay Auth V1.5 project files
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  merge-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract and merge V1.5 files (leave workflows untouched)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="CrossPlay_Auth_V1_5_Unsigned_iOS_Build.zip"
+          test -f "$ZIP" || {
+            echo "::error::Missing $ZIP in repository root."
+            exit 1
+          }
+
+          mkdir -p /tmp/crossplay-v15
+          unzip -q "$ZIP" -d /tmp/crossplay-v15
+          SOURCE="/tmp/crossplay-v15/crossplay_auth_v1"
+
+          test -d "$SOURCE"
+          test -f "$SOURCE/apps/admin/app.json"
+          test -f "$SOURCE/apps/user/app.json"
+          test -f "$SOURCE/.github/workflows/build-unsigned-ios.yml"
+
+          # Merge all project files except .github. This avoids asking
+          # the GitHub Actions token to create/modify workflow files.
+          rsync -a --exclude='.github/' "$SOURCE/" ./
+
+          echo "V1.5 app and backend files merged."
+          echo "The unsigned workflow is intentionally not copied in this run."
+          ls -la
+
+      - name: Commit project files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No project file changes to commit."
+          else
+            git commit -m "Merge CrossPlay Auth V1.5 project files"
+            git push origin HEAD:main
+          fi

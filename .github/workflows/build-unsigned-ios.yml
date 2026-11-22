@@ -1,0 +1,87 @@
+name: Build unsigned iOS IPAs
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "apps/admin/**"
+      - "apps/user/**"
+      - ".github/workflows/build-unsigned-ios.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.app }} unsigned IPA
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: admin
+            directory: apps/admin
+          - app: user
+            directory: apps/user
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install JavaScript dependencies
+        working-directory: ${{ matrix.directory }}
+        run: npm install
+
+      - name: Generate native iOS project
+        working-directory: ${{ matrix.directory }}
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Install CocoaPods
+        working-directory: ${{ matrix.directory }}/ios
+        run: pod install
+
+      - name: Build unsigned iOS app
+        working-directory: ${{ matrix.directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          DERIVED="$RUNNER_TEMP/DerivedData-${{ matrix.app }}"
+          PROJECT="$(find ios -maxdepth 1 -name '*.xcodeproj' -print -quit)"
+          WORKSPACE="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          if [[ -z "$PROJECT" || -z "$WORKSPACE" ]]; then
+            echo "Expo iOS project/workspace not found"
+            exit 1
+          fi
+          SCHEME="$(basename "$PROJECT" .xcodeproj)"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$DERIVED" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+          APP_PATH="$(find "$DERIVED/Build/Products/Release-iphoneos" -maxdepth 1 -name '*.app' -print -quit)"
+          if [[ -z "$APP_PATH" ]]; then
+            echo "Built .app not found"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa"
+          zip -qry "$GITHUB_WORKSPACE/crossplay-${{ matrix.app }}-unsigned.ipa" Payload
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crossplay-${{ matrix.app }}-unsigned-ipa
+          path: crossplay-${{ matrix.app }}-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14

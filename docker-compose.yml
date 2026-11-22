@@ -1,0 +1,15 @@
+services:
+  crossplay-api:
+    build: ./server
+    container_name: crossplay-auth-api
+    restart: unless-stopped
+    env_file: ./server/.env
+    environment:
+      DATABASE_PATH: /data/crossplay.db
+      APP_ENV: production
+    ports:
+      - "8000:8000"
+    volumes:
+      - crossplay_data:/data
+volumes:
+  crossplay_data:

@@ -1,0 +1,59 @@
+name: Build CrossPlay iOS apps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "CrossPlay_Auth_V1_4_BuildReady.zip"
+      - ".github/workflows/build-ios.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build ${{ matrix.app }} iOS IPA
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: admin
+            directory: apps/admin
+          - app: user
+            directory: apps/user
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Unpack CrossPlay source
+        run: |
+          unzip -q CrossPlay_Auth_V1_4_BuildReady.zip
+          test -f "crossplay_auth_v1/${{ matrix.directory }}/app.json"
+
+      - name: Install app dependencies
+        working-directory: crossplay_auth_v1/${{ matrix.directory }}
+        run: npm install
+
+      - name: Install EAS CLI
+        run: npm install --global eas-cli
+
+      - name: Link or create EAS project
+        working-directory: crossplay_auth_v1/${{ matrix.directory }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          test -n "$EXPO_TOKEN" || { echo "Missing EXPO_TOKEN repository secret"; exit 1; }
+          eas init --account dy_s1mple --non-interactive
+
+      - name: Build iOS IPA with EAS
+        working-directory: crossplay_auth_v1/${{ matrix.directory }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: eas build --platform ios --profile preview --non-interactive --wait
