@@ -14,15 +14,17 @@ permissions:
 jobs:
   build:
     name: Build ${{ matrix.app }} unsigned IPA
-    runs-on: macos-15
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - app: admin
             directory: apps/admin
+            runner: macos-26
           - app: user
             directory: apps/user
+            runner: macos-15
 
     steps:
       - name: Checkout repository
